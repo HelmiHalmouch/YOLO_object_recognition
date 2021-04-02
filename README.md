@@ -1,5 +1,5 @@
 # YOLO_object_recognition
-Detection and recognition of object using YOLO
+Objects detection and recognition using pre-trained YOLO (you only look once) model
 
 ## requirements
 Python3.x <br/>
