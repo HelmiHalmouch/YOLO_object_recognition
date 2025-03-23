@@ -1,159 +1,137 @@
-'''
-This script show the code of yolo for object detection 
-Remark: here we will use a existing pre-trained model 
-		YOLO = You Only Look Once 
-
-GHANMI Helmi 
-
-20/01/2019
+# -*- coding: utf-8 -*-
 
 '''
+This script demonstrates object detection using the YOLO (You Only Look Once) model.
+Note: We are using an existing pre-trained YOLO model for this task.
 
-# import required packages
+Author: GHANMI Helmi
+Date: 20/01/2019
+'''
+
+# Import required packages
 import sys
 import os
 import cv2
-import matplotlib.pyplot as plt
 import numpy as np
+import matplotlib.pyplot as plt
 
-'''
-1- define the threshold value of confidance and the non maxima supression 
-2- define the width and the height of the image should be precessed 
-3- Here we use 'coco' dataset so we get the label of classes from the file coco.names
-4- load the confd yolo file yolov3.cfg
-5- load the weight of the model yolov3.weights
-6- define the dnn (deep neural network) backend from opencv 
-7- reade the frame from video and apply the neural network 
-8- detect, draw rectangle and put text ID of the detected object 
+class YoloObjectDetection:
+    def __init__(self, model_cfg, model_weights, class_file, input_width=416, input_height=416, conf_threshold=0.3, nms_threshold=0.5):
+        """
+        Initializes the YOLO object detection class with necessary configurations and settings.
+        :param model_cfg: Path to the YOLO configuration file (e.g., yolov3.cfg)
+        :param model_weights: Path to the YOLO weights file (e.g., yolov3.weights)
+        :param class_file: Path to the file containing class labels (e.g., coco.names)
+        :param input_width: The input image width (default: 416)
+        :param input_height: The input image height (default: 416)
+        :param conf_threshold: Confidence threshold for object detection (default: 0.3)
+        :param nms_threshold: Non-maxima suppression threshold (default: 0.5)
+        """
+        self.conf_threshold = conf_threshold
+        self.nms_threshold = nms_threshold
+        self.input_width = input_width
+        self.input_height = input_height
+        self.classes = self.load_classes(class_file)
+        self.net = self.load_yolo_model(model_cfg, model_weights)
 
-'''
-#----------------------------------------------------------------------------------------------#
+    def load_classes(self, class_file):
+        """Load class labels from the specified file."""
+        with open(class_file, 'r') as f:
+            classes = f.read().rstrip('\n').split('\n')
+            print(f"Loaded {len(classes)} classes")
+        return classes
 
-confThreshold = 0.3  # confidence threshould
-nmsThreshold = 0.5  # Non maxima supression threshold
+    def load_yolo_model(self, model_cfg, model_weights):
+        """Load the YOLO model with the configuration and weights."""
+        # Load YOLO model from configuration and weights files
+        net = cv2.dnn.readNetFromDarknet(model_cfg, model_weights)
+        net.setPreferableBackend(cv2.dnn.DNN_BACKEND_OPENCV)
+        net.setPreferableTarget(cv2.dnn.DNN_TARGET_CPU)
+        return net
 
-# with ans hight of the input image
-inputWidth = 416
-inputHight = 416
+    def get_outputs_names(self):
+        """Get the names of all the output layers of the YOLO model."""
+        layer_names = self.net.getLayerNames()
+        output_layers = [layer_names[i[0] - 1] for i in self.net.getUnconnectedOutLayers()]
+        return output_layers
 
-# load the label of classe
-ClasseFile = 'datasets.names'
-classes = None
+    def postprocess(self, frame, outs):
+        """Process the outputs from YOLO and draw bounding boxes on the frame."""
+        frame_height = frame.shape[0]
+        frame_width = frame.shape[1]
 
-with open(ClasseFile, 'r') as f:
-    #classes = len(f.readlines())
-    classes = f.read().rstrip('\n').split('\n')
-    print(classes)
-    print('#-----------#')
-    print('The number of classes is :{}'.format(len(classes)))
+        class_ids = []
+        confidences = []
+        boxes = []
 
+        for out in outs:
+            for detection in out:
+                scores = detection[5:]
+                class_id = np.argmax(scores)
+                confidence = scores[class_id]
 
-def getOutputsNames(net):
-    # Get the names of all the layers in the network
-    layersNames = net.getLayerNames()
-    # Get the names of the output layers, such as the layers with unconnected
-    # outputs
-    return [layersNames[i[0] - 1] for i in net.getUnconnectedOutLayers()]
+                if confidence > self.conf_threshold:
+                    center_x = int(detection[0] * frame_width)
+                    center_y = int(detection[1] * frame_height)
+                    width = int(detection[2] * frame_width)
+                    height = int(detection[3] * frame_height)
 
+                    left = int(center_x - width / 2)
+                    top = int(center_y - height / 2)
 
-def postprocess(frame, outs, confThreshold, nmsThreshold):
-    frameHeight = frame.shape[0]
-    frameWidth = frame.shape[1]
+                    class_ids.append(class_id)
+                    confidences.append(float(confidence))
+                    boxes.append([left, top, width, height])
 
-    # deinfe the list of classid, confidences an boxes detection coordinates
-    classIDs = []  # all values of lcasses ID
-    confidences = []  # all values of confidences
-    boxes = []  # all coordiantes boxes for the  detection of many object in same frame
+        indices = cv2.dnn.NMSBoxes(boxes, confidences, self.conf_threshold, self.nms_threshold)
+        for i in indices.flatten():
+            box = boxes[i]
+            left, top, width, height = box
+            self.draw_prediction(frame, class_ids[i], confidences[i], left, top, left + width, top + height)
 
-    # the list of detection is [x, y, width, height, confidence, classID],
-    # where classID = 0,1,2,....80 (because coco dataset have 80 classes)
-    for out in outs:
-        for detection in out:
-            scores = detection[5:]
-            classID = np.argmax(scores)
-            confidence = scores[classID]
+    def draw_prediction(self, frame, class_id, confidence, left, top, right, bottom):
+        """Draw a bounding box and label on the image."""
+        cv2.rectangle(frame, (left, top), (right, bottom), (0, 255, 0), 3)
+        label = f"{self.classes[class_id]}: {confidence:.2f}"
+        cv2.putText(frame, label, (left, top - 10), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
 
-            if confidence > confThreshold:
-                centerX = int(detection[0] * frameWidth)
-                centerY = int(detection[1] * frameHeight)
+    def run_detection(self, input_image):
+        """Run YOLO object detection on an input image."""
+        # Read the input image
+        img = cv2.imread(input_image)
 
-                width = int(detection[2] * frameWidth)
-                height = int(detection[3] * frameHeight)
+        # Create a blob from the image and set it as input to the network
+        blob = cv2.dnn.blobFromImage(img, 1 / 255, (self.input_width, self.input_height), [0, 0, 0], 1, crop=False)
+        self.net.setInput(blob)
 
-                left = int(centerX - width / 2)
-                top = int(centerY - height / 2)
+        # Get the network outputs
+        outs = self.net.forward(self.get_outputs_names())
 
-                classIDs.append(classID)
-                confidences.append(float(confidence))
-                boxes.append([left, top, width, height])
+        # Postprocess the output and draw bounding boxes on the frame
+        self.postprocess(img, outs)
 
-    indices = cv2.dnn.NMSBoxes(boxes, confidences, confThreshold, nmsThreshold)
-    for i in indices:
-        i = i[0]
-        box = boxes[i]
-        left = box[0]
-        top = box[1]
-        width = box[2]
-        height = box[3]
+        # Save the result image
+        cv2.imwrite('results/results_detection.png', img)
 
-        drawPredObject(frame, classIDs[i], confidences[
-                       i], left, top, left + width, top + height)
+        # Show the result
+        cv2.imshow('Object Detection using YOLO', img)
+        cv2.waitKey(3000)
+        cv2.destroyAllWindows()
 
-# define the function to draw the rectangle around the detected object
-
-
-def drawPredObject(frame, classId, conf, left, top, right, bottom):
-    # Draw a bounding box.
-    cv2.rectangle(frame, (left, top), (right, bottom), (0, 255, 0), 3)
-
-    label = '%.2f' % conf
-
-    # Get the label for the class name and its confidence
-    if classes:
-        assert (classId < len(classes))
-        label = '%s:%s' % (classes[classId], label)
-
-    # draw a text with the label of the object
-    cv2.putText(frame, label, (left, top),
-                cv2.FONT_HERSHEY_SIMPLEX, 2, (0, 0, 255), 3)
-
-
-def run_yolo_detection(input_image):
-        # load confidence and weights of yolo model
-    modelConf = 'yolov3.cfg'
-    modelWeights = 'yolov3.weights'
-
-    # apply the dnn (deep neural network) backend from opencv
-    net = cv2.dnn.readNetFromDarknet(modelConf, modelWeights)
-    net.setPreferableBackend(cv2.dnn.DNN_BACKEND_OPENCV)
-    net.setPreferableTarget(cv2.dnn.DNN_TARGET_CPU)
-    # print(type(net))
-
-    # read input image
-    img = cv2.imread(input_image)
-
-    # create a 4D blob from the img
-    blob = cv2.dnn.blobFromImage(
-        img, 1 / 255, (inputWidth, inputHight), [0, 0, 0], 1, crop=False)
-    # set the blob image as in input of th first layer in the neural
-    # network(net)
-    net.setInput(blob)
-    # get the output of the net
-    outs = net.forward(getOutputsNames(net))
-    # apply the funtion of postprocess
-    postprocess(img, outs, confThreshold, nmsThreshold)
-    # save the detection results
-    cv2.imwrite('results/results_detection.png', img)
-    # show the result
-    cv2.imshow('Object detection using YOLO', img)
-    cv2.waitKey(3000)
-    return img
+        return img
 
 
 if __name__ == '__main__':
-
+    # Define file paths
+    model_cfg = 'yolov3.cfg'
+    model_weights = 'yolov3.weights'
+    class_file = 'coco.names'
     input_image = 'input_test_image/image_test.jpg'
 
-    run_yolo_detection(input_image)
+    # Initialize the YOLO detection model
+    yolo_detector = YoloObjectDetection(model_cfg, model_weights, class_file)
 
-    print('Processing finished !')
+    # Run detection on the input image
+    yolo_detector.run_detection(input_image)
+
+    print('Processing finished!')
