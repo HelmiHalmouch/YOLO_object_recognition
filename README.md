@@ -1,15 +1,24 @@
-# YOLO_object_recognition
-Objects detection and recognition using pre-trained YOLO (you only look once) model
+# YOLO Object Recognition
 
-## requirements
-Python3.x <br/>
-Opencv <br/>
-numpy <br/>
+This project performs object detection and recognition using the pre-trained YOLO (You Only Look Once) model.
 
-## remark 
-We should use a pre-trained Yolo (yolo you only live once) model for object detection <br/>
-The code of object recognition using Yolo is in the folder : detection_using_YOLO_model/ <br/>
-Run the code : <br/>
-		1- download the file of yolov3.weights from this link : https://pjreddie.com/media/files/yolov3.weights <br/>
-		2-python script_image_detection.py
+## Requirements
 
+- Python 3.x
+- OpenCV
+- NumPy
+
+## Remarks
+
+To use YOLO for object detection, you need to use a pre-trained YOLO model. The object recognition code using YOLO can be found in the folder:  
+**`detection_using_YOLO_model/`**
+
+### Steps to run the code:
+
+1. Download the pre-trained YOLOv3 weights file from the following link:  
+   [YOLOv3 weights](https://pjreddie.com/media/files/yolov3.weights)
+
+2. Run the Python script for image detection:  
+ ```bash
+   python script_image_detection.py
+```
